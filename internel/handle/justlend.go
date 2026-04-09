@@ -46,7 +46,7 @@ func Fee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cost, trxAmount, energyPerTrx, rentalEnergy, durationHours, err := jl.EstimateRentCost(req.RentalEnergy, req.DurationHours, req.ResourceType)
+	cost, trxAmount, energyPerTrx, rentalEnergy, err := jl.EstimateRentCost(req.RentalEnergy, req.DurationHours, req.ResourceType)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
 		return
@@ -58,7 +58,7 @@ func Fee(w http.ResponseWriter, r *http.Request) {
 			"cost":          cost,
 			"trxAmount":     trxAmount,
 			"energyPerTrx":  energyPerTrx,
-			"durationHours": durationHours,
+			"durationHours": req.DurationHours,
 			"note":          "cost = Energy Fee + Security Deposit + Liquidation Penalty (min 20 TRX)",
 		},
 	})
@@ -78,6 +78,50 @@ type RentalRequest struct {
 // 返回值：
 // txId          → 租赁HASH
 func Rental(w http.ResponseWriter, r *http.Request) {
+	grpcClient, err := tronsdk.NewClient()
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
+		return
+	}
+	jl, err := justlend.NewEnergyRental(grpcClient)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	var req RentalRequest
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": "parameters are incorrect"})
+		return
+	}
+
+	txId, err := jl.RentResource(
+		req.RenterPrivateKeyHex,
+		req.Receiver,
+		req.RentalEnergy,
+		req.DurationHours,
+		justlend.ResourceType(req.ResourceType),
+		big.NewInt(req.ExtraDepositSun),
+	)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"ok": true,
+		"data": map[string]interface{}{
+			"txId": txId,
+		},
+	})
+}
+
+// ReRental 续租
+// 返回值：
+// txId          → 续租HASH
+func ReRental(w http.ResponseWriter, r *http.Request) {
 	grpcClient, err := tronsdk.NewClient()
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})

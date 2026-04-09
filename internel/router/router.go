@@ -16,6 +16,7 @@ func NewRouter() *mux.Router {
 
 	router.Methods("POST").Path("/fee").HandlerFunc(handle.Fee)
 	router.Methods("POST").Path("/rent").HandlerFunc(handle.Rental)
+	router.Methods("POST").Path("/rerent").HandlerFunc(handle.ReRental)
 	router.Methods("POST").Path("/return/by/renter").HandlerFunc(handle.ReturnByRenter)
 	router.Methods("POST").Path("/return/by/receiver").HandlerFunc(handle.ReturnByReceiver)
 	router.Methods("GET").Path("/orderInfo/{renter}/{receiver}/{resourceType:[0-1]+}").HandlerFunc(handle.GetOrderInfo)

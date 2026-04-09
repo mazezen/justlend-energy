@@ -1,15 +1,12 @@
 package justlend
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
-	"github.com/golang/protobuf/proto"
 )
 
 // RentResource 租赁资源（输入 rentalEnergy + durationHours）
@@ -41,7 +38,7 @@ func (e *EnergyRental) RentResource(
 	}
 
 	// 1. 费用预估
-	prepayCost, trxAmountSun, _, _, _, err := e.EstimateRentCost(rentalEnergy, durationHours, resourceType)
+	prepayCost, trxAmountSun, _, _, err := e.EstimateRentCost(rentalEnergy, durationHours, resourceType)
 	if err != nil {
 		return "", fmt.Errorf("estimate rent cost failed: %w", err)
 	}
@@ -73,19 +70,10 @@ func (e *EnergyRental) RentResource(
 	}
 
 	// 4. 使用私钥签名
-	sk, err := crypto.HexToECDSA(renterPrivateKeyHex)
-	rowData, err := proto.Marshal(tx.GetTransaction().GetRawData())
+	tx, err = Signature(renterPrivateKeyHex, tx)
 	if err != nil {
-		return "", fmt.Errorf("marshal transaction failed: %w", err)
+		return "", fmt.Errorf("signature failed: %w", err)
 	}
-	h256h := sha256.New()
-	h256h.Write(rowData)
-	hash := h256h.Sum(nil)
-	signature, err := crypto.Sign(hash, sk)
-	if err != nil {
-		return "", fmt.Errorf("sign transaction failed: %w", err)
-	}
-	tx.Transaction.Signature = append(tx.Transaction.Signature, signature)
 
 	result, err := e.client.Broadcast(tx.Transaction)
 	if err != nil {

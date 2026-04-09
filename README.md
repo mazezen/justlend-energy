@@ -20,10 +20,11 @@ go run main.go
 
 1. **预估费用**  (✅)
 2. **租赁**   (✅)
-3. **退租**   (✅)
+3. **续租**   (✅)
+4. **退租**   (✅)
    * **由付款者退租**   (✅)
-   * **由能量接收者退租 **  (✅)
-4. **订单查询 **  (✅)
+   * **由能量接收者退租**  (✅)
+5. **订单查询**  (✅)
 
 
 
@@ -41,7 +42,7 @@ go run main.go
 
 ```json
 {
-    "rental_energy": 60000000, // 租赁的能量数量 60000000 能量
+    "rental_energy": 10000, // 租赁的能量数量 10000 能量
     "duration_hours": 1, // 租赁时长 1小时
     "resource_type": 1 // 资源 1: 能量 0: 带宽
 }
@@ -52,12 +53,12 @@ go run main.go
 ```json
 {
     "data": {
-        "cost": 40003694,
+        "cost": 2172898372,
         "durationHours": 24,
-        "energyPerTrx": "9.21056504",
+        "energyPerTrx": "9.20682091",
         "note": "cost = Energy Fee + Security Deposit + Liquidation Penalty (min 20 TRX)",
-        "rentalEnergy": 60000000,
-        "trxAmount": 6666667
+        "rentalEnergy": 10000,
+        "trxAmount": 1086151245
     },
     "ok": true
 }
@@ -67,7 +68,7 @@ go run main.go
 
 #### 2. 租赁
 
- * 描述: 租赁能量
+ * 描述: 租赁
  * Method: POST
  * Endpoint: /rent
 
@@ -77,7 +78,7 @@ go run main.go
 {
     "renter_private_key": "", // 付款者私钥
     "receiver": "", // 接收能量的地址（可与 renter 相同）
-    "rental_energy": 60000000, // 租赁的能量数量
+    "rental_energy": 10000, // 租赁的能量数量
     "duration_hours": 1, // 租赁时长（小时）
     "resource_type": 1, // 1: 能量  0: 带宽
     "extra_deposit_sun": 0 // 额外保证金（sun），可传 nil 或 0
@@ -97,7 +98,41 @@ go run main.go
 
 
 
-#### 3. 退租 - 由付款者退租
+#### 3.  续租
+
+ * 描述: 续租
+ * Method: POST
+ * Endpoint: /rent
+
+**请求参数**
+
+```json
+{
+    "renter_private_key": "", // 付款者私钥
+    "receiver": "", // 接收能量的地址（可与 renter 相同）
+    "rental_energy": 10000, // 租赁的能量数量
+    "duration_hours": 1, // 租赁时长（小时）
+    "resource_type": 1, // 1: 能量  0: 带宽
+    "extra_deposit_sun": 0 // 额外保证金（sun），可传 nil 或 0
+}
+```
+
+**响应结果**
+
+```json
+{
+    "data": {
+        "txId": ""
+    },
+    "ok": true
+}
+```
+
+
+
+
+
+#### 4. 退租 - 由付款者退租
 
  * 描述: 退租
  * Method: POST
@@ -127,7 +162,7 @@ go run main.go
 
 
 
-#### 4. 退租 - 由能量接受者退租
+#### 5. 退租 - 由能量接受者退租
 
  * 描述: 退租
  * Method: POST
@@ -157,7 +192,7 @@ go run main.go
 
 
 
-#### 5. 租赁订单 
+#### 6. 租赁订单 
 
  * 描述: 查询租赁订单
  * Method: GET
@@ -173,9 +208,9 @@ go run main.go
 {
     "data": {
         "order": {
-            "Amount": 6666667,
-            "SecurityDeposit": 40000667,
-            "RentIndex": 965452107781204722
+            "Amount": ,
+            "SecurityDeposit": ,
+            "RentIndex": 
         }
     },
     "ok": true

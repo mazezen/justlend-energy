@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"net/http"
 	"time"
+
+	"github.com/mazezen/justlend-energy/utils"
 )
 
 // EstimateRentCost 计算租赁费用
@@ -15,69 +17,71 @@ import (
 // trxAmount      → 合约 rentResource 的 amount 参数 (sun)
 // energyPerTrx   → 完整小数字符串，如 "9.21052404"
 // rentalEnergy   → 用户输入的能量数量
-func (e *EnergyRental) EstimateRentCost(rentalEnergy int64, durationHours int, resourceType ResourceType) (*big.Int, *big.Int, string, int64, int, error) {
+func (e *EnergyRental) EstimateRentCost(rentalEnergy int64, durationHours int, resourceType ResourceType) (*big.Int, *big.Int, string, int64, error) {
 	if rentalEnergy <= 0 {
-		return nil, nil, "", 0, 0, fmt.Errorf("rental_energy must be > 0")
+		return nil, nil, "", 0, fmt.Errorf("rental_energy must be > 0")
 	}
 	if durationHours <= 0 {
-		return nil, nil, "", 0, 0, fmt.Errorf("duration_hours must be > 0")
+		return nil, nil, "", 0, fmt.Errorf("duration_hours must be > 0")
 	}
 
-	// 1. 获取精确的 energyStakePerTrx, energyRentPerTrxFloat（带小数）
+	// 1. 获取精确汇率
 	energyStakePerTrxFloat, err := e.getEnergyStakePerTrxFloat()
 	if err != nil {
-		return nil, nil, "", 0, 0, fmt.Errorf("failed to get energyStakePerTrx: %w", err)
+		return nil, nil, "", 0, fmt.Errorf("failed to get energyStakePerTrx: %w", err)
 	}
+	energyPerTrxStr := utils.Float64ToString(energyStakePerTrxFloat, 8)
 
-	energyPerTrxStr := fmt.Sprintf("%.8f", energyStakePerTrxFloat)
-
-	// 2. 计算 trxAmount (向上取整，至少 1 TRX)
-	trxAmount := new(big.Int).Div(big.NewInt(rentalEnergy), big.NewInt(int64(energyStakePerTrxFloat)))
-	remainder := new(big.Int).Mod(big.NewInt(rentalEnergy), big.NewInt(int64(energyStakePerTrxFloat)))
-	if remainder.Cmp(big.NewInt(0)) > 0 {
-		trxAmount = new(big.Int).Add(trxAmount, big.NewInt(1))
+	// 2. 计算 trxAmount (精确计算)
+	rentalEnergyStr := utils.Int64ToString(rentalEnergy, 2)
+	div := utils.Div(rentalEnergyStr, energyPerTrxStr, 8)
+	if utils.LessThan(div, "1") {
+		return nil, nil, "", 0, fmt.Errorf("resource rent: resource amount must be no less than 1TRX")
 	}
+	trxAmountStr := utils.Mul(div, "1e6", 8)
+	fmt.Printf("[DEGBU] trxAmount: %s\n", trxAmountStr)
 
-	if trxAmount.Cmp(big.NewInt(1)) < 0 {
-		return nil, nil, energyPerTrxStr, rentalEnergy, 0, fmt.Errorf("rental_energy too small. Current rate ≈ %s Energy/TRX. Suggested min: %d Energy", energyPerTrxStr, int(energyStakePerTrxFloat)*10)
+	// 3. 合约最低要求：amount >= 1 TRX
+	if utils.LessThanOrEqual(trxAmountStr, "0") {
+		minEnergy := new(big.Int).Mul(big.NewInt(1_000_000), big.NewInt(int64(energyStakePerTrxFloat)))
+		return nil, nil, energyPerTrxStr, rentalEnergy, fmt.Errorf(
+			"rental_energy too small. Current rate ≈ %.8f Energy/TRX. Minimum rental_energy required ≈ %d",
+			energyStakePerTrxFloat, minEnergy.Int64())
 	}
+	trxAmount := utils.StringToBigInt(trxAmountStr)
 
-	// 3. 获取 rentalRate
-	rentalRate, err := e.getRentalRate(resourceType)
-	if err != nil {
-		return nil, nil, energyPerTrxStr, rentalEnergy, 0, fmt.Errorf("failed to get rentalRate: %w", err)
-	}
-
-	// 4. 计算基础租金费用
+	// 4. 计算基础租金（很小）
 	durationDays := float64(durationHours) / 24.0
+	rentalRate, _ := e.getRentalRate(resourceType)
 	dailyRate := new(big.Float).Quo(new(big.Float).SetInt(rentalRate), big.NewFloat(1e18))
-	dailyRate = dailyRate.Mul(dailyRate, big.NewFloat(86400)) // 每天价格 (sun)
-
+	dailyRate = dailyRate.Mul(dailyRate, big.NewFloat(86400))
 	energyFee := new(big.Float).Mul(new(big.Float).SetInt(trxAmount), dailyRate)
 	energyFee = energyFee.Mul(energyFee, big.NewFloat(durationDays))
 
-	securityDeposit := new(big.Float).Mul(new(big.Float).SetInt(trxAmount), big.NewFloat(6.0)) // 6.0 需要微调
-	minDeposit := big.NewFloat(60)                                                             // 最低 60 TRX（小订单最稳妥）
+	// 5. Security Deposit（保证金）
+	securityDeposit := new(big.Float).Mul(new(big.Float).SetInt(trxAmount), big.NewFloat(2)) // 1-2倍
+	minDeposit := big.NewFloat(30)
+
 	if securityDeposit.Cmp(minDeposit) < 0 {
 		securityDeposit = minDeposit
 	}
 
-	// 5.  ==================== Liquidation Penalty ====================
-	// // Max(20 TRX, 0.01% * energyAmount / energyRentPerTrx)
-	penalty := new(big.Float).Mul(new(big.Float).SetInt(trxAmount), big.NewFloat(0.00008)) // 0.008%
+	// 6. Liquidation Penalty（官方公式）
+	penalty := new(big.Float).Mul(new(big.Float).SetInt(trxAmount), big.NewFloat(0.00008))
 	minPenalty := big.NewFloat(20)
 	if penalty.Cmp(minPenalty) < 0 {
 		penalty = minPenalty
 	}
 
-	// 6. callValue（msg.value）
+	// 7. 最终支付金额
 	total := new(big.Float).Add(energyFee, securityDeposit)
 	total = new(big.Float).Add(total, penalty)
 
 	prepayCost := new(big.Int)
 	total.Int(prepayCost)
+	fmt.Printf("[DEBUG] prepayCost = %s energyPerTrxStr=%s trxAmount=%s rentalEnergy=%s\n", prepayCost.String(), energyPerTrxStr, trxAmountStr, rentalEnergyStr)
 
-	return prepayCost, trxAmount, energyPerTrxStr, rentalEnergy, durationHours, nil
+	return prepayCost, trxAmount, energyPerTrxStr, rentalEnergy, nil
 }
 
 type DashboardResponse struct {
@@ -93,7 +97,7 @@ func (e *EnergyRental) getEnergyStakePerTrxFloat() (float64, error) {
 	if e == nil {
 		return 0, fmt.Errorf("nil pointer")
 	}
-	
+
 	e.cacheMutex.RLock()
 	if time.Since(e.cacheTime) < 30*time.Second && e.cacheEnergyStakePerTrx > 0 {
 		val := e.cacheEnergyStakePerTrx
@@ -116,6 +120,7 @@ func (e *EnergyRental) getEnergyStakePerTrxFloat() (float64, error) {
 	var dashboard DashboardResponse
 	json.Unmarshal(body, &dashboard)
 
+	fmt.Printf("[DEBUG] Raw EnergyStakePerTrx from dashboard = %s\n", dashboard.Data.EnergyStakePerTrx)
 	f := new(big.Float)
 	f.SetString(dashboard.Data.EnergyStakePerTrx)
 	result, _ := f.Float64()
