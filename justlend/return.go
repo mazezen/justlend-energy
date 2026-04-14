@@ -97,10 +97,6 @@ func (e *EnergyRental) ReturnResourceByReceiver(
 	// 1. 如果要全部退还,先查询当前订单的实际amount
 	finalReturnAmount := returnEnergy
 	if returnEnergy.Cmp(big.NewInt(0)) <= 0 {
-		renter, err = PrivateKeyToPublicAddress(receiverPrivateKeyHex)
-		if err != nil {
-			return "", err
-		}
 		info, err := e.GetRentInfo(renter, receiver, resourceType)
 		if err != nil {
 			return "", err
