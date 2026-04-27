@@ -10,10 +10,11 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/mazezen/justlend-energy/justlend"
 	"github.com/mazezen/justlend-energy/tronsdk"
+	"github.com/mazezen/justlend-energy/utils"
 )
 
 type FeeRequest struct {
-	RentalEnergy  int64                 `json:"rental_energy"`
+	RentalEnergy  string                `json:"rental_energy"`
 	DurationHours int                   `json:"duration_hours"`
 	ResourceType  justlend.ResourceType `json:"resource_type"`
 }
@@ -46,7 +47,7 @@ func Fee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cost, trxAmount, energyPerTrx, rentalEnergy, err := jl.EstimateRentCost(req.RentalEnergy, req.DurationHours, req.ResourceType)
+	preCost, trxAmount, energyPerTrx, rentalEnergy, err := jl.EstimateRentCost(req.RentalEnergy, req.DurationHours, req.ResourceType)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
 		return
@@ -55,7 +56,7 @@ func Fee(w http.ResponseWriter, r *http.Request) {
 		"ok": true,
 		"data": map[string]interface{}{
 			"rentalEnergy":  rentalEnergy,
-			"cost":          cost,
+			"preCost":       utils.Div(preCost.String(), "1e6", 6),
 			"trxAmount":     trxAmount,
 			"energyPerTrx":  energyPerTrx,
 			"durationHours": req.DurationHours,
@@ -68,7 +69,7 @@ func Fee(w http.ResponseWriter, r *http.Request) {
 type RentalRequest struct {
 	RenterPrivateKeyHex string `json:"renter_private_key"` // 付款者私钥
 	Receiver            string `json:"receiver"`           // 接收能量的地址（可与 renter 相同）
-	RentalEnergy        int64  `json:"rental_energy"`      // 租赁的能量数量
+	RentalEnergy        string `json:"rental_energy"`      // 租赁的能量数量
 	DurationHours       int    `json:"duration_hours"`     // 租赁时长（小时）
 	ResourceType        int8   `json:"resource_type"`      // 1: 能量  0: 带宽
 	ExtraDepositSun     int64  `json:"extra_deposit_sun"`  // 额外保证金（sun），可传 nil 或 0
@@ -165,7 +166,7 @@ func ReRental(w http.ResponseWriter, r *http.Request) {
 type ReturnByRenterRequest struct {
 	RenterPrivateKeyHex string `json:"renter_private_key"` // 付款者私钥
 	Receiver            string `json:"receiver"`           // 接收能量的地址（订单中的 receiver）
-	ReturnEnergy        int64  `json:"return_energy"`      // 部分退还的 TRX 量，传 nil 或 0 表示全部退还
+	ReturnEnergy        string `json:"return_energy"`      // 部分退还的 TRX 量，传 nil 或 0 表示全部退还
 	ResourceType        int8   `json:"resource_type"`      // 1: 能量  0: 带宽
 }
 
@@ -186,9 +187,7 @@ func ReturnByRenter(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	var (
-		req ReturnByRenterRequest
-	)
+	var req ReturnByRenterRequest
 	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": "parameters are incorrect"})
 		return
@@ -197,7 +196,7 @@ func ReturnByRenter(w http.ResponseWriter, r *http.Request) {
 	txId, err := jl.ReturnResource(
 		req.RenterPrivateKeyHex,
 		req.Receiver,
-		big.NewInt(req.ReturnEnergy),
+		req.ReturnEnergy,
 		justlend.ResourceType(req.ResourceType),
 	)
 	if err != nil {
@@ -216,7 +215,7 @@ func ReturnByRenter(w http.ResponseWriter, r *http.Request) {
 type ReturnByReceiverRequest struct {
 	ReceiverPrivateKeyHex string `json:"receiver_private_key_hex"` // 必须是 receiver（接收者）的私钥
 	Renter                string `json:"renter"`                   // 订单的付款者（renter）地址
-	ReturnEnergy          int64  `json:"return_energy"`            // 部分退还的 TRX 量，传 nil 或 0 表示全部退还
+	ReturnEnergy          string `json:"return_energy"`            // 部分退还的 TRX 量，传 nil 或 0 表示全部退还
 	ResourceType          int8   `json:"resource_type"`            // 1: 能量  0: 带宽
 }
 
@@ -247,7 +246,7 @@ func ReturnByReceiver(w http.ResponseWriter, r *http.Request) {
 	txId, err = jl.ReturnResourceByReceiver(
 		req.ReceiverPrivateKeyHex,
 		req.Renter,
-		big.NewInt(req.ReturnEnergy),
+		req.ReturnEnergy,
 		justlend.ResourceType(req.ResourceType),
 	)
 	if err != nil {

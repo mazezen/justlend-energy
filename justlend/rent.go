@@ -7,24 +7,24 @@ import (
 	"strings"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
+	"github.com/mazezen/justlend-energy/utils"
 )
 
 // RentResource 租赁资源（输入 rentalEnergy + durationHours）
 // renterPrivateKeyHex string, // 付款者（renter）的私钥，必须提供
 // receiver string,            // 接收能量的地址（可与 renter 相同）
-// rentalEnergy int64,        // 租赁的能量数量（例如 100000000 = 1亿 energy）
+// rentalEnergy string,        // 租赁的能量数量（例如 10000 能量）
 // durationHours int,          // 租赁时长（小时）
 // resourceType ResourceType,
 // extraDepositSun *big.Int, // 额外保证金（sun），可传 nil 或 0
 func (e *EnergyRental) RentResource(
 	renterPrivateKeyHex,
 	receiver string,
-	rentalEnergy int64,
+	rentalEnergy string,
 	durationHours int,
 	resourceType ResourceType,
 	extraDepositSun *big.Int,
 ) (string, error) {
-
 	if extraDepositSun == nil {
 		extraDepositSun = big.NewInt(0)
 	}
@@ -38,7 +38,7 @@ func (e *EnergyRental) RentResource(
 	}
 
 	// 1. 费用预估
-	prepayCost, trxAmountSun, _, _, err := e.EstimateRentCost(rentalEnergy, durationHours, resourceType)
+	prepayCost, trxAmount, _, _, err := e.EstimateRentCost(rentalEnergy, durationHours, resourceType)
 	if err != nil {
 		return "", fmt.Errorf("estimate rent cost failed: %w", err)
 	}
@@ -48,10 +48,11 @@ func (e *EnergyRental) RentResource(
 
 	fmt.Printf("[DEBUG] fromAddr (renter) = %s\n", fromAddr)
 	fmt.Printf("[DEBUG] receiver = %s\n", receiver)
-	fmt.Printf("[DEBUG] trxAmount = %s sun\n", trxAmountSun.String())
+	fmt.Printf("[DEBUG] trxAmount = %s sun\n", trxAmount)
 	fmt.Printf("[DEBUG] callValue = %s sun\n", callValue.String())
 
-	jsonParams := fmt.Sprintf(`["%s", "%s", "%d"]`, receiver, trxAmountSun.String(), uint64(resourceType))
+	trxAmountSun := utils.Mul(trxAmount, "1e6", 0)
+	jsonParams := fmt.Sprintf(`["%s", "%s", "%d"]`, receiver, trxAmountSun, uint64(resourceType))
 	fmt.Printf("[DEBUG] jsonParams = %s\n", jsonParams)
 
 	// 3. 调用合约（payable）

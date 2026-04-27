@@ -17,49 +17,49 @@ import (
 // trxAmount      → 合约 rentResource 的 amount 参数 (sun)
 // energyPerTrx   → 完整小数字符串，如 "9.21052404"
 // rentalEnergy   → 用户输入的能量数量
-func (e *EnergyRental) EstimateRentCost(rentalEnergy int64, durationHours int, resourceType ResourceType) (*big.Int, *big.Int, string, int64, error) {
-	if rentalEnergy <= 0 {
-		return nil, nil, "", 0, fmt.Errorf("rental_energy must be > 0")
+func (e *EnergyRental) EstimateRentCost(rentalEnergy string, durationHours int, resourceType ResourceType) (*big.Int, string, string, string, error) {
+	if utils.LessThanOrEqual(rentalEnergy, "0") {
+		return nil, "0", "", "0", fmt.Errorf("rental_energy must be > 0")
 	}
 	if durationHours <= 0 {
-		return nil, nil, "", 0, fmt.Errorf("duration_hours must be > 0")
+		return nil, "0", "", "0", fmt.Errorf("duration_hours must be > 0")
 	}
 
 	// 1. 获取精确汇率
 	energyStakePerTrxFloat, err := e.getEnergyStakePerTrxFloat()
 	if err != nil {
-		return nil, nil, "", 0, fmt.Errorf("failed to get energyStakePerTrx: %w", err)
+		return nil, "0", "", "0", fmt.Errorf("failed to get energyStakePerTrx: %w", err)
 	}
 	energyPerTrxStr := utils.Float64ToString(energyStakePerTrxFloat, 8)
 
 	// 2. 计算 trxAmount (精确计算)
-	rentalEnergyStr := utils.Int64ToString(rentalEnergy, 2)
-	div := utils.Div(rentalEnergyStr, energyPerTrxStr, 8)
-	if utils.LessThan(div, "1") {
-		return nil, nil, "", 0, fmt.Errorf("resource rent: resource amount must be no less than 1TRX")
+	trxAmount := utils.Div(rentalEnergy, energyPerTrxStr, 6)
+	if utils.LessThan(rentalEnergy, "1") {
+		return nil, "0", "", "0", fmt.Errorf("resource rent: resource amount must be no less than 1TRX")
 	}
-	trxAmountStr := utils.Mul(div, "1e6", 8)
-	fmt.Printf("[DEGBU] trxAmount: %s\n", trxAmountStr)
+	trxAmountSun := utils.Mul(trxAmount, "1e6", 0)
+
+	fmt.Printf("[DEGBU] trxAmount: %s\n", trxAmount)
+	fmt.Printf("[DEGBU] trxAmountSun: %s\n", trxAmountSun)
 
 	// 3. 合约最低要求：amount >= 1 TRX
-	if utils.LessThanOrEqual(trxAmountStr, "0") {
-		minEnergy := new(big.Int).Mul(big.NewInt(1_000_000), big.NewInt(int64(energyStakePerTrxFloat)))
-		return nil, nil, energyPerTrxStr, rentalEnergy, fmt.Errorf(
-			"rental_energy too small. Current rate ≈ %.8f Energy/TRX. Minimum rental_energy required ≈ %d",
-			energyStakePerTrxFloat, minEnergy.Int64())
+	if utils.LessThanOrEqual(trxAmount, "0") {
+		return nil, "0", energyPerTrxStr, rentalEnergy, fmt.Errorf(
+			"rental_energy too small. Current rate ≈ %.8f Energy/TRX. Minimum rental_energy required ≈ %s",
+			energyStakePerTrxFloat, energyPerTrxStr)
 	}
-	trxAmount := utils.StringToBigInt(trxAmountStr)
 
+	trxAmountBigInt := utils.StringToBigInt(trxAmountSun)
 	// 4. 计算基础租金（很小）
 	durationDays := float64(durationHours) / 24.0
 	rentalRate, _ := e.getRentalRate(resourceType)
 	dailyRate := new(big.Float).Quo(new(big.Float).SetInt(rentalRate), big.NewFloat(1e18))
 	dailyRate = dailyRate.Mul(dailyRate, big.NewFloat(86400))
-	energyFee := new(big.Float).Mul(new(big.Float).SetInt(trxAmount), dailyRate)
+	energyFee := new(big.Float).Mul(new(big.Float).SetInt(trxAmountBigInt), dailyRate)
 	energyFee = energyFee.Mul(energyFee, big.NewFloat(durationDays))
 
 	// 5. Security Deposit（保证金）
-	securityDeposit := new(big.Float).Mul(new(big.Float).SetInt(trxAmount), big.NewFloat(2)) // 1-2倍
+	securityDeposit := new(big.Float).Mul(new(big.Float).SetInt(trxAmountBigInt), big.NewFloat(2)) // 1-2倍
 	minDeposit := big.NewFloat(30)
 
 	if securityDeposit.Cmp(minDeposit) < 0 {
@@ -67,7 +67,7 @@ func (e *EnergyRental) EstimateRentCost(rentalEnergy int64, durationHours int, r
 	}
 
 	// 6. Liquidation Penalty（官方公式）
-	penalty := new(big.Float).Mul(new(big.Float).SetInt(trxAmount), big.NewFloat(0.00008))
+	penalty := new(big.Float).Mul(new(big.Float).SetInt(trxAmountBigInt), big.NewFloat(0.00008))
 	minPenalty := big.NewFloat(20)
 	if penalty.Cmp(minPenalty) < 0 {
 		penalty = minPenalty
@@ -79,7 +79,7 @@ func (e *EnergyRental) EstimateRentCost(rentalEnergy int64, durationHours int, r
 
 	prepayCost := new(big.Int)
 	total.Int(prepayCost)
-	fmt.Printf("[DEBUG] prepayCost = %s energyPerTrxStr=%s trxAmount=%s rentalEnergy=%s\n", prepayCost.String(), energyPerTrxStr, trxAmountStr, rentalEnergyStr)
+	fmt.Printf("[DEBUG] prepayCost = %s energyPerTrxStr=%s trxAmount=%s rentalEnergy=%s\n", prepayCost.String(), energyPerTrxStr, trxAmount, rentalEnergy)
 
 	return prepayCost, trxAmount, energyPerTrxStr, rentalEnergy, nil
 }

@@ -3,9 +3,9 @@ package justlend
 import (
 	"encoding/hex"
 	"fmt"
-	"math/big"
 
 	"github.com/fbsobreira/gotron-sdk/pkg/proto/api"
+	"github.com/mazezen/justlend-energy/utils"
 )
 
 // ReturnResource 退租（由 renter 调用）
@@ -13,11 +13,7 @@ import (
 // receiver string             接收能量的地址（订单中的 receiver）
 // returnEnergy *big.Int       部分退还的 TRX 量，传 nil 或 0 表示全部退还
 // resourceType ResourceType
-func (e *EnergyRental) ReturnResource(renterPrivateKeyHex, receiver string, returnEnergy *big.Int, resourceType ResourceType) (string, error) {
-	if returnEnergy == nil {
-		returnEnergy = big.NewInt(0)
-	}
-
+func (e *EnergyRental) ReturnResource(renterPrivateKeyHex, receiver string, returnEnergy string, resourceType ResourceType) (string, error) {
 	renter, err := PrivateKeyToPublicAddress(renterPrivateKeyHex)
 	if err != nil {
 		return "", err
@@ -25,18 +21,19 @@ func (e *EnergyRental) ReturnResource(renterPrivateKeyHex, receiver string, retu
 
 	// 1. 如果要全部退还,先查询当前订单的实际amount
 	finalReturnAmount := returnEnergy
-	if returnEnergy.Cmp(big.NewInt(0)) <= 0 {
+	if utils.LessThanOrEqual(returnEnergy, "0") {
 		info, err := e.GetRentInfo(renter, receiver, resourceType)
 		if err != nil {
 			return "", err
 		}
-		if info.Amount.Cmp(big.NewInt(0)) == 0 {
+		if utils.Equal(info.Amount, "0") {
 			return "", fmt.Errorf("there are currently no refundable orders (orders do not exist or have been fully refunded)")
 		}
 		finalReturnAmount = info.Amount
-		fmt.Printf("[DEBUG] 全部退还 → 查询到当前 amount = %s sun\n", finalReturnAmount.String())
+		fmt.Printf("[DEBUG] 全部退还 → 查询到当前 amount = %s sun\n", finalReturnAmount)
 	}
-	jsonParams := fmt.Sprintf(`["%s","%s","%d"]`, receiver, finalReturnAmount.String(), uint64(resourceType))
+	finalReturnAmount = utils.Mul(finalReturnAmount, "1e6", 0)
+	jsonParams := fmt.Sprintf(`["%s","%s","%d"]`, receiver, finalReturnAmount, uint64(resourceType))
 
 	// 2. 调用合约（非 payable，callValue = 0）
 	tx, err := e.client.TriggerContract(
@@ -82,13 +79,9 @@ func (e *EnergyRental) ReturnResource(renterPrivateKeyHex, receiver string, retu
 func (e *EnergyRental) ReturnResourceByReceiver(
 	receiverPrivateKeyHex string,
 	renter string,
-	returnEnergy *big.Int,
+	returnEnergy string,
 	resourceType ResourceType,
 ) (string, error) {
-	if returnEnergy == nil {
-		returnEnergy = big.NewInt(0)
-	}
-
 	receiver, err := PrivateKeyToPublicAddress(receiverPrivateKeyHex)
 	if err != nil {
 		return "", err
@@ -96,19 +89,19 @@ func (e *EnergyRental) ReturnResourceByReceiver(
 
 	// 1. 如果要全部退还,先查询当前订单的实际amount
 	finalReturnAmount := returnEnergy
-	if returnEnergy.Cmp(big.NewInt(0)) <= 0 {
+	if utils.LessThanOrEqual(returnEnergy, "0") {
 		info, err := e.GetRentInfo(renter, receiver, resourceType)
 		if err != nil {
 			return "", err
 		}
-		if info.Amount.Cmp(big.NewInt(0)) == 0 {
+		if utils.Equal(info.Amount, "0") {
 			return "", fmt.Errorf("there are currently no refundable orders (orders do not exist or have been fully refunded)")
 		}
 		finalReturnAmount = info.Amount
-		fmt.Printf("[DEBUG] 全部退还 → 查询到当前 amount = %s sun\n", finalReturnAmount.String())
+		fmt.Printf("[DEBUG] 全部退还 → 查询到当前 amount = %s sun\n", finalReturnAmount)
 	}
-
-	jsonParams := fmt.Sprintf(`["%s","%s","%d"]`, renter, finalReturnAmount.String(), uint64(resourceType))
+	finalReturnAmount = utils.Mul(finalReturnAmount, "1e6", 0)
+	jsonParams := fmt.Sprintf(`["%s","%s","%d"]`, renter, finalReturnAmount, uint64(resourceType))
 
 	// 2. 调用合约（非 payable）
 	txExt, err := e.client.TriggerContract(
@@ -130,7 +123,7 @@ func (e *EnergyRental) ReturnResourceByReceiver(
 	if err != nil {
 		return "", fmt.Errorf("signature failed: %w", err)
 	}
-	
+
 	// 4. 广播交易
 	result, err := e.client.Broadcast(txExt.Transaction)
 	if err != nil {

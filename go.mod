@@ -7,6 +7,7 @@ require (
 	github.com/fbsobreira/gotron-sdk v0.26.0
 	github.com/golang/protobuf v1.5.4
 	github.com/gorilla/mux v1.8.1
+	github.com/shopspring/decimal v1.4.0
 	google.golang.org/grpc v1.80.0
 )
 
@@ -21,7 +22,7 @@ require (
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/rjeczalik/notify v0.9.3 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
-	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/spf13/cast v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
 	golang.org/x/crypto v0.49.0 // indirect

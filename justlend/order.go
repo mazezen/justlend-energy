@@ -3,10 +3,12 @@ package justlend
 import (
 	"fmt"
 	"math/big"
+
+	"github.com/mazezen/justlend-energy/utils"
 )
 
 type RentalInfo struct {
-	Amount          *big.Int // 委托的 TRX 数量 (sun)
+	Amount          string   // 委托的 TRX 数量 (sun)
 	SecurityDeposit *big.Int // 保证金
 	RentIndex       *big.Int // 租金指数
 }
@@ -54,7 +56,7 @@ func (e *EnergyRental) GetRentInfo(renter, receiver string, resourceType Resourc
 	fmt.Printf("[DEBUG] RentIndex       = %s\n", rentIndex.String())
 
 	return &RentalInfo{
-		Amount:          amount,
+		Amount:          utils.Div(amount.String(), "1e6", 2),
 		SecurityDeposit: securityDeposit,
 		RentIndex:       rentIndex,
 	}, nil
