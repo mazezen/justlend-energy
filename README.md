@@ -44,7 +44,8 @@ go run main.go
 {
     "rental_energy": 10000, // 租赁的能量数量 10000 能量
     "duration_hours": 1, // 租赁时长 1小时
-    "resource_type": 1 // 资源 1: 能量 0: 带宽
+    "resource_type": 1, // 资源 1: 能量 0: 带宽
+    "typ": 1
 }
 ```
 
@@ -52,15 +53,16 @@ go run main.go
 
 ```json
 {
-    "data": {
-        "cost": 2172898372,
-        "durationHours": 24,
-        "energyPerTrx": "9.20682091",
-        "note": "cost = Energy Fee + Security Deposit + Liquidation Penalty (min 20 TRX)",
-        "rentalEnergy": 10000,
-        "trxAmount": 1086151245
-    },
-    "ok": true
+  "data": {
+    "durationHours": 24,
+    "energyPerTrx": "9.24349642",
+    "minRefundTrx": "33.116287",
+    "note": "cost = Energy Fee + Security Deposit + Liquidation Penalty (min 20 TRX)",
+    "preCost": "129.302399",
+    "rentalEnergy": "1000000",
+    "trxAmount": "108184.171287"
+  },
+  "ok": true
 }
 ```
 

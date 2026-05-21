@@ -17,6 +17,7 @@ type FeeRequest struct {
 	RentalEnergy  string                `json:"rental_energy"`
 	DurationHours int                   `json:"duration_hours"`
 	ResourceType  justlend.ResourceType `json:"resource_type"`
+	Typ           int                   `json:"typ"`       // 1: 首租, 2: 续租
 }
 
 // Fee 计算租赁费用
@@ -47,18 +48,20 @@ func Fee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	preCost, trxAmount, energyPerTrx, rentalEnergy, err := jl.EstimateRentCost(req.RentalEnergy, req.DurationHours, req.ResourceType)
+	result, err := jl.EstimateRentCost(req.RentalEnergy, req.DurationHours, req.ResourceType, req.Typ)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
 		return
 	}
+	prepayCost := result["prepayCost"].(*big.Int)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"ok": true,
 		"data": map[string]interface{}{
-			"rentalEnergy":  rentalEnergy,
-			"preCost":       utils.Div(preCost.String(), "1e6", 6),
-			"trxAmount":     trxAmount,
-			"energyPerTrx":  energyPerTrx,
+			"rentalEnergy":  result["rentalEnergy"],
+			"preCost":       utils.Div(prepayCost.String(), "1e6", 6),
+			"minRefundTrx":  result["minRefundTrx"],
+			"trxAmount":     result["trxAmount"],
+			"energyPerTrx":  result["energyPerTrx"],
 			"durationHours": req.DurationHours,
 			"note":          "cost = Energy Fee + Security Deposit + Liquidation Penalty (min 20 TRX)",
 		},
@@ -105,6 +108,7 @@ func Rental(w http.ResponseWriter, r *http.Request) {
 		req.DurationHours,
 		justlend.ResourceType(req.ResourceType),
 		big.NewInt(req.ExtraDepositSun),
+		1, // 首租
 	)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
@@ -149,6 +153,7 @@ func ReRental(w http.ResponseWriter, r *http.Request) {
 		req.DurationHours,
 		justlend.ResourceType(req.ResourceType),
 		big.NewInt(req.ExtraDepositSun),
+		2, // 续租
 	)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
