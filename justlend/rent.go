@@ -10,12 +10,17 @@ import (
 )
 
 // RentResource 租赁资源（输入 rentalEnergy + durationHours）
+// 自动识别首租/续租：
+//   - currentEnergy="" 或 remainingHours=0 → 首租
+//   - currentEnergy!="" 且 remainingHours>0 → 续租
 // renterPrivateKeyHex string, // 付款者（renter）的私钥，必须提供
 // receiver string,            // 接收能量的地址（可与 renter 相同）
 // rentalEnergy string,        // 租赁的能量数量（例如 10000 能量）
 // durationHours int,          // 租赁时长（小时）
 // resourceType ResourceType,
 // extraDepositSun *big.Int, // 额外保证金（sun），可传 nil 或 0
+// currentEnergy string,      // 当前链上能量（续租时传，首租传""）
+// remainingHours int,        // 剩余小时数（续租时传，首租传0）
 func (e *EnergyRental) RentResource(
 	renterPrivateKeyHex,
 	receiver string,
@@ -23,7 +28,8 @@ func (e *EnergyRental) RentResource(
 	durationHours int,
 	resourceType ResourceType,
 	extraDepositSun *big.Int,
-	typ int,
+	currentEnergy string,
+	remainingHours int,
 ) (string, error) {
 	if extraDepositSun == nil {
 		extraDepositSun = big.NewInt(0)
@@ -37,8 +43,8 @@ func (e *EnergyRental) RentResource(
 		return "", err
 	}
 
-	// 1. 费用预估
-	estimateResult, err := e.EstimateRentCost(rentalEnergy, durationHours, resourceType, typ)
+	// 1. 费用预估（自动识别首租/续租）
+	estimateResult, err := e.EstimateRentCost(rentalEnergy, durationHours, resourceType, currentEnergy, remainingHours)
 	if err != nil {
 		return "", fmt.Errorf("estimate rent cost failed: %w", err)
 	}

@@ -14,10 +14,11 @@ import (
 )
 
 type FeeRequest struct {
-	RentalEnergy  string                `json:"rental_energy"`
-	DurationHours int                   `json:"duration_hours"`
-	ResourceType  justlend.ResourceType `json:"resource_type"`
-	Typ           int                   `json:"typ"`       // 1: 首租, 2: 续租
+	RentalEnergy   string                `json:"rental_energy"`
+	DurationHours  int                   `json:"duration_hours"`
+	ResourceType   justlend.ResourceType `json:"resource_type"`
+	CurrentEnergy  string                `json:"current_energy"`   // 当前链上能量（续租时传）
+	RemainingHours int                   `json:"remaining_hours"`  // 剩余小时数（续租时传）
 }
 
 // Fee 计算租赁费用
@@ -48,7 +49,7 @@ func Fee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := jl.EstimateRentCost(req.RentalEnergy, req.DurationHours, req.ResourceType, req.Typ)
+	result, err := jl.EstimateRentCost(req.RentalEnergy, req.DurationHours, req.ResourceType, req.CurrentEnergy, req.RemainingHours)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
 		return
@@ -76,6 +77,8 @@ type RentalRequest struct {
 	DurationHours       int    `json:"duration_hours"`     // 租赁时长（小时）
 	ResourceType        int8   `json:"resource_type"`      // 1: 能量  0: 带宽
 	ExtraDepositSun     int64  `json:"extra_deposit_sun"`  // 额外保证金（sun），可传 nil 或 0
+	CurrentEnergy       string `json:"current_energy"`     // 当前链上能量（续租时传）
+	RemainingHours      int    `json:"remaining_hours"`    // 剩余小时数（续租时传）
 }
 
 // Rental 租赁
@@ -108,7 +111,7 @@ func Rental(w http.ResponseWriter, r *http.Request) {
 		req.DurationHours,
 		justlend.ResourceType(req.ResourceType),
 		big.NewInt(req.ExtraDepositSun),
-		1, // 首租
+		"", 0, // 首租，不传 currentEnergy/remainingHours
 	)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
@@ -153,7 +156,8 @@ func ReRental(w http.ResponseWriter, r *http.Request) {
 		req.DurationHours,
 		justlend.ResourceType(req.ResourceType),
 		big.NewInt(req.ExtraDepositSun),
-		2, // 续租
+		req.CurrentEnergy,
+		req.RemainingHours,
 	)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ok": false, "message": err.Error()})
